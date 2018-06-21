@@ -1,10 +1,10 @@
 package com.crayondata.ml.scoring;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -18,35 +18,45 @@ import org.jpmml.evaluator.Evaluator;
 import org.jpmml.evaluator.FieldValue;
 import org.jpmml.evaluator.HasEntityId;
 import org.jpmml.evaluator.HasEntityRegistry;
-import org.jpmml.evaluator.HasGroupFields;
-import org.jpmml.evaluator.HasOrderFields;
 import org.jpmml.evaluator.HasProbability;
 import org.jpmml.evaluator.InputField;
 import org.jpmml.evaluator.ModelEvaluatorFactory;
-import org.jpmml.evaluator.OutputField;
 import org.jpmml.evaluator.TargetField;
 import org.jpmml.model.PMMLUtil;
+import org.springframework.core.io.ClassPathResource;
 import org.xml.sax.SAXException;
 
 import com.google.common.collect.BiMap;
 
 public class Main 
 {
+	public static Evaluator evaluator;
+	static
+	{
+		evaluator = loadModel();
+	}
+	
 	public static void main(String[] args)
 	{
+		Map<String, String> input = new HashMap<String, String>();
+		input.put("fixed_acidity", "7");
+		input.put("volatile_acidity", "0.7");
+		input.put("density", "5.0001");
+		input.put("citric_acid", "0.8");
+		
+		predict(input);
+		
+	}
+
+	private static Evaluator loadModel() {
 		PMML pmml = null;
-		Main main = new Main();
 		try 
 		{
-			FileInputStream fileReader = new FileInputStream(main.getFile());
-			pmml = PMMLUtil.unmarshal(fileReader);
+			pmml = PMMLUtil.unmarshal(getFile());
 		} catch (SAXException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (JAXBException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
@@ -56,14 +66,14 @@ public class Main
 		
 		evaluator.verify();
 		
-		Map<FieldName, FieldValue> arguments = new LinkedHashMap<FieldName, FieldValue>();
+		return evaluator;
+	}
+	
+	public  static String predict(Map<String, String> input)
+	{
+		Map<FieldName, FieldValue> arguments = new HashMap<>();
 		
-		Map<String, String> input = new HashMap<String, String>();
-		input.put("fixed_acidity", "7");
-		input.put("volatile_acidity", "0.7");
-		input.put("density", "5.0001");
-		input.put("citric_acid", "0.8");
-		
+		List<String> response = new ArrayList<>();
 		
 		List<InputField> inputFieldList = evaluator.getInputFields();
 		for (InputField inputField : inputFieldList) 
@@ -86,6 +96,7 @@ public class Main
 
 				Object unboxedTargetFieldValue = computable.getResult();
 				System.out.println(targetFieldName.getValue() + " : " + unboxedTargetFieldValue);
+				response.add(targetFieldName.getValue() + " : " + unboxedTargetFieldValue);
 			}
 			else if(targetFieldValue instanceof HasEntityId){
 				HasEntityId hasEntityId = (HasEntityId)targetFieldValue;
@@ -97,13 +108,33 @@ public class Main
 					HasProbability hasProbability = (HasProbability)targetFieldValue;
 					Double winnerProbability = hasProbability.getProbability(winner.getId());
 					System.out.println(targetFieldName.getValue() + " : " + winnerProbability);
+					response.add(targetFieldName.getValue() + " : " + winnerProbability);
 				}
 			}
 		}
-	
+		return Arrays.toString(response.toArray(new String[0]));
 	}
 
-	private File getFile() {
-		return new File(getClass().getClassLoader().getResource("test_model.pmml").getFile());
+	private static InputStream getFile() {
+		try {
+			ClassPathResource resource = new ClassPathResource("/models/test_model.pmml");
+			return resource.getInputStream();
+		
+		//return new File(getClass().getClassLoader().getResource("/models/test_model.pmml").getFile());
+		}
+		
+		catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	public static Evaluator getEvaluator() {
+		return evaluator;
+	}
+
+	public static void setEvaluator(Evaluator evaluator) {
+		Main.evaluator = evaluator;
 	}
 }
